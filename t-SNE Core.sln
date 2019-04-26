@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.572
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "t-SNE", "t-SNE\t-SNE.csproj", "{EEAB82C9-8C46-4249-9FE4-70BB4740AB59}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "t-SNE Runner", "t-SNE Runner\t-SNE Runner.csproj", "{D67E509B-5708-45D1-BF2E-B37E2109A800}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EEAB82C9-8C46-4249-9FE4-70BB4740AB59}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EEAB82C9-8C46-4249-9FE4-70BB4740AB59}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EEAB82C9-8C46-4249-9FE4-70BB4740AB59}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EEAB82C9-8C46-4249-9FE4-70BB4740AB59}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D67E509B-5708-45D1-BF2E-B37E2109A800}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D67E509B-5708-45D1-BF2E-B37E2109A800}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D67E509B-5708-45D1-BF2E-B37E2109A800}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D67E509B-5708-45D1-BF2E-B37E2109A800}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5E95D07B-DD6D-410D-BD10-DEABF4391B95}
+	EndGlobalSection
+EndGlobal
