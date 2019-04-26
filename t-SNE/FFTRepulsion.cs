@@ -36,18 +36,15 @@ namespace Hybrid_tSNE
         internal double[] box_bounds;
         internal double[] kernel_tilde;
         internal double[] tilde;
-        internal double[] tilde_values;
-        internal readonly int[] bins;
-        internal readonly double[] in_box;
-        internal readonly double[] interpolated_values;
+        internal readonly int[,] bins;
+        internal readonly double[,] in_box;
+        internal readonly double[,,] interpolated_values;
         internal readonly double[] interpolation_denominators;
-        internal readonly double[] potentialsQij;
+        internal readonly double[,] potentialsQij;
 
 
         public FFTRepulsion(double[] Y, double[] GradR, int N, int D, PIConfiguration PIConfig)
         {
-            Control.UseNativeMKL();  //required by FFTRepulsion
-
             this.Y = Y;
             grad = GradR;
             this.N = N;
@@ -58,12 +55,12 @@ namespace Hybrid_tSNE
             min_num_intervals = PIConfig.min_num_intervals;
             intervals_per_integer = PIConfig.intervals_per_integer;
 
-            bins = new int[N * D];
-            in_box = new double[N * D];
-            interpolated_values = new double[N * D * n_interpolation_points];
+            bins = new int[N, D];
+            in_box = new double[N, D];
+            interpolated_values = new double[N, D, n_interpolation_points];
             interpolation_denominators = new double[n_interpolation_points];
             CalculateDenominators();
-            potentialsQij = new double[N * n_terms];
+            potentialsQij = new double[N, n_terms];
         }
 
         internal abstract void CalculatePotentials();
@@ -90,16 +87,16 @@ namespace Hybrid_tSNE
                 for (int k = 0; k < D; k++) sqrsum += Y[D * i + k] * Y[D * i + k];
 
                 double sum = 0;
-                for (int k = 0; k < D; k++) sum += Y[D * i + k] * potentialsQij[i * n_terms + k + 1];
+                for (int k = 0; k < D; k++) sum += Y[D * i + k] * potentialsQij[i, k + 1];
 
-                sum_Q += (1 + sqrsum) * potentialsQij[i * n_terms] - 2 * sum + potentialsQij[(i + 1) * n_terms - 1];
+                sum_Q += (1 + sqrsum) * potentialsQij[i, 0] - 2 * sum + potentialsQij[i, n_terms - 1];
             }
             sum_Q -= N;
 
             // Make the negative term, or F_rep in the equation 3 of the paper
             for (int i = 0; i < N; i++)
                 for (int j = 0; j < D; j++)
-                    grad[D * i + j] = (Y[D * i + j] * potentialsQij[i * n_terms] - potentialsQij[i * n_terms + j + 1]) / sum_Q;
+                    grad[D * i + j] = (Y[D * i + j] * potentialsQij[i, 0] - potentialsQij[i, j + 1]) / sum_Q;
         }
 
         private void CalculateDenominators()
@@ -152,15 +149,10 @@ namespace Hybrid_tSNE
 
                 box_bounds = new double[n_boxes_per_dim + 1];
                 tilde = new double[n_interpolation_points_1d];
-                tilde_values = new double[(int)Math.Pow(n_interpolation_points_1d, D) * n_terms];
                 kernel_tilde = new double[(int)Math.Pow(2 * n_interpolation_points_1d + (D == 1 ? 2 : 0), D)];
                 Reallocate();
             }
-            else
-            {
-                Array.Clear(tilde_values, 0, tilde_values.Length);
-		Clear();
-            }
+            else Clear();
 
             box_width = (max - min) / n_boxes_per_dim;
             for (int i = 0; i <= n_boxes_per_dim; i++) box_bounds[i] = i * box_width + min;
@@ -177,14 +169,14 @@ namespace Hybrid_tSNE
                 for (int k = 0; k < D; k++)
                 {
                     int id = D * i + k;
-                    in_box[id] = (Y[id] - min) / box_width;
-                    bins[id] = (int)in_box[id];
-                    in_box[id] -= bins[id];
+                    in_box[i, k] = (Y[id] - min) / box_width;
+                    bins[i, k] = (int)in_box[i, k];
+                    in_box[i, k] -= bins[i, k];
 
-                    if (bins[id] == n_boxes_per_dim)
+                    if (bins[i, k] == n_boxes_per_dim)
                     {
-                        bins[id]--;
-                        in_box[id] = 1;
+                        bins[i, k]--;
+                        in_box[i, k] = 1;
                     }
                 }
         }
@@ -197,12 +189,11 @@ namespace Hybrid_tSNE
                 for (int k = 0; k < D; k++)
                     for (int j = 0; j < n_interpolation_points; j++)
                     {
-                        int id = D * (j * N + i) + k;
                         double value = 1;
                         for (int l = 0; l < n_interpolation_points; l++)
                             if (j != l)
-                                value *= in_box[D * i + k] - (0.5 + l) * h;
-                        interpolated_values[id] = value / interpolation_denominators[j];
+                                value *= in_box[i, k] - (0.5 + l) * h;
+                        interpolated_values[i, k, j] = value / interpolation_denominators[j];
                     }
             });
         }
@@ -210,6 +201,7 @@ namespace Hybrid_tSNE
 
     class FFTRepulsion1D : FFTRepulsion
     {
+        internal double[,] tilde_values;
         internal double[] fft;
 
         public FFTRepulsion1D(double[] Y, double[] GradR, int N, PIConfiguration PIConfig) : base(Y, GradR, N, 1, PIConfig) { }
@@ -224,28 +216,30 @@ namespace Hybrid_tSNE
 
         internal override void Reallocate()
         {
+            tilde_values = new double[n_interpolation_points_1d, n_terms];
             fft = new double[2 * n_interpolation_points_1d + 2];
         }
 
         internal override void Clear()
         {
+            Array.Clear(tilde_values, 0, tilde_values.Length);
         }
 
         private void ComputeW()
         {
             Parallel.For(0, N, i =>
             {
-                int box_i = bins[i] * n_interpolation_points;
+                int box_i = bins[i, 0] * n_interpolation_points;
                 double sqrsum = Y[i] * Y[i];
 
                 for (int interp_i = 0; interp_i < n_interpolation_points; interp_i++)
                 {
                     // Compute the index of the point in the interpolation grid of points
                     int id = n_terms * (box_i + interp_i);
-                    double product = interpolated_values[interp_i * N + i];
-                    tilde_values[id] += product;
-                    tilde_values[id + 1] += product * Y[i];
-                    tilde_values[id + 2] += product * sqrsum;
+                    double product = interpolated_values[i, 0, interp_i];
+                    tilde_values[box_i + interp_i, 0] += product;
+                    tilde_values[box_i + interp_i, 1] += product * Y[i];
+                    tilde_values[box_i + interp_i, 2] += product * sqrsum;
                 }
             });
         }
@@ -277,7 +271,7 @@ namespace Hybrid_tSNE
             for (int d = 0; d < n_terms; d++)
             {
                 Array.Clear(fft, 0, n_interpolation_points_1d);
-                for (int i = 0; i < n_interpolation_points_1d; i++) fft[n_interpolation_points_1d + i] = tilde_values[i * n_terms + d];
+                for (int i = 0; i < n_interpolation_points_1d; i++) fft[n_interpolation_points_1d + i] = tilde_values[i, d];
                 Array.Clear(fft, n_fft_coeffs, fft.Length - n_fft_coeffs);
 
                 Fourier.ForwardReal(fft, n_fft_coeffs);
@@ -293,7 +287,7 @@ namespace Hybrid_tSNE
                 Fourier.InverseReal(fft, n_fft_coeffs);
 
                 for (int i = 0; i < n_interpolation_points_1d; i++)
-                    tilde_values[i * n_terms + d] = fft[i];
+                    tilde_values[i, d] = fft[i];
             }
         }
         
@@ -302,18 +296,16 @@ namespace Hybrid_tSNE
             Array.Clear(potentialsQij, 0, potentialsQij.Length);
             Parallel.For(0, N, i =>
             {
-                int box_i = bins[i] * n_interpolation_points;
-                int id = i * n_terms;
+                int box_i = bins[i, 0] * n_interpolation_points;
 
                 for (int interp_i = 0; interp_i < n_interpolation_points; interp_i++)
                 {
                     // Compute the index of the point in the interpolation grid of points
-                    int idx = n_terms * (box_i + interp_i);
-                    double interpolated = interpolated_values[interp_i * N + i];
+                    double interpolated = interpolated_values[i, 0, interp_i];
 
-                    potentialsQij[id] += interpolated * tilde_values[idx];
-                    potentialsQij[id + 1] += interpolated * tilde_values[idx + 1];
-                    potentialsQij[id + 2] += interpolated * tilde_values[idx + 2];
+                    potentialsQij[i, 0] += interpolated * tilde_values[box_i + interp_i, 0];
+                    potentialsQij[i, 1] += interpolated * tilde_values[box_i + interp_i, 1];
+                    potentialsQij[i, 2] += interpolated * tilde_values[box_i + interp_i, 2];
                 }
             });
         }
@@ -321,6 +313,7 @@ namespace Hybrid_tSNE
 
     class FFTRepulsion2D : FFTRepulsion
     {
+        internal double[,,] tilde_values;
         internal Complex[] fft;
 
         public FFTRepulsion2D(double[] Y, double[] GradR, int N, PIConfiguration PIConfig) : base(Y, GradR, N, 2, PIConfig) { }
@@ -335,11 +328,13 @@ namespace Hybrid_tSNE
 
         internal override void Reallocate()
         {
-		fft = new Complex[(int)Math.Pow(2 * n_interpolation_points_1d, 2)];
+            tilde_values = new double[n_interpolation_points_1d, n_interpolation_points_1d, n_terms];
+            fft = new Complex[(int)Math.Pow(2 * n_interpolation_points_1d, 2)];
         }
 
         internal override void Clear()
         {
+            Array.Clear(tilde_values, 0, tilde_values.Length);
             Array.Clear(fft, 0, fft.Length);
         }
 
@@ -347,8 +342,8 @@ namespace Hybrid_tSNE
         {
             Parallel.For(0, N, i =>
             {
-                int box_i = bins[i * 2] * n_interpolation_points;
-                int box_j = bins[i * 2 + 1] * n_interpolation_points;
+                int box_i = bins[i, 0] * n_interpolation_points;
+                int box_j = bins[i, 1] * n_interpolation_points;
                 double sqrsum = Y[2 * i] * Y[2 * i] + Y[2 * i + 1] * Y[2 * i + 1];
 
                 for (int interp_i = 0; interp_i < n_interpolation_points; interp_i++)
@@ -356,11 +351,11 @@ namespace Hybrid_tSNE
                     {
                         // Compute the index of the point in the interpolation grid of points
                         int id = n_terms * ((box_i + interp_i) * n_interpolation_points_1d + box_j + interp_j);
-                        double product = interpolated_values[2 * (interp_i * N + i)] * interpolated_values[2 * (interp_j * N + i) + 1];
-                        tilde_values[id] += product;
-                        tilde_values[id + 1] += product * Y[2 * i];
-                        tilde_values[id + 2] += product * Y[2 * i + 1];
-                        tilde_values[id + 3] += product * sqrsum;
+                        double product = interpolated_values[i, 0, interp_i] * interpolated_values[i, 1, interp_j];
+                        tilde_values[box_i + interp_i, box_j + interp_j, 0] += product;
+                        tilde_values[box_i + interp_i, box_j + interp_j, 1] += product * Y[2 * i];
+                        tilde_values[box_i + interp_i, box_j + interp_j, 2] += product * Y[2 * i + 1];
+                        tilde_values[box_i + interp_i, box_j + interp_j, 3] += product * sqrsum;
                     }
             });
         }
@@ -401,7 +396,7 @@ namespace Hybrid_tSNE
                 Array.Clear(fft, 0, fft.Length);
                 for (int i = 0; i < n_interpolation_points_1d; i++)
                     for (int j = 0; j < n_interpolation_points_1d; j++)
-                        fft[i * n_fft_coeffs + j] = new Complex(tilde_values[(i * n_interpolation_points_1d + j) * n_terms + d], tilde_values[(i * n_interpolation_points_1d + j) * n_terms + d + 1]);
+                        fft[i * n_fft_coeffs + j] = new Complex(tilde_values[i, j, d], tilde_values[i, j, d + 1]);
 
                 Fourier.Forward2D(fft, n_fft_coeffs, n_fft_coeffs);
 
@@ -415,8 +410,8 @@ namespace Hybrid_tSNE
                 for (int i = 0; i < n_interpolation_points_1d; i++)
                     for (int j = 0; j < n_interpolation_points_1d; j++)
                     {
-                        tilde_values[(i * n_interpolation_points_1d + j) * n_terms + d] = fft[(n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j].Real;
-                        tilde_values[(i * n_interpolation_points_1d + j) * n_terms + d + 1] = fft[(n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j].Imaginary;
+                        tilde_values[i, j, d] = fft[(n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j].Real;
+                        tilde_values[i, j, d + 1] = fft[(n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j].Imaginary;
                     }
             }
         }
@@ -426,21 +421,19 @@ namespace Hybrid_tSNE
             Array.Clear(potentialsQij, 0, potentialsQij.Length);
             Parallel.For(0, N, i =>
             {
-                int box_i = bins[i * 2] * n_interpolation_points;
-                int box_j = bins[i * 2 + 1] * n_interpolation_points;
-                int id = i * n_terms;
+                int box_i = bins[i, 0] * n_interpolation_points;
+                int box_j = bins[i, 1] * n_interpolation_points;
 
                 for (int interp_i = 0; interp_i < n_interpolation_points; interp_i++)
                     for (int interp_j = 0; interp_j < n_interpolation_points; interp_j++)
                     {
                         // Compute the index of the point in the interpolation grid of points
-                        int idx = n_terms * ((box_i + interp_i) * n_interpolation_points_1d + box_j + interp_j);
-                        double interpolated = interpolated_values[2 * (interp_i * N + i)] * interpolated_values[2 * (interp_j * N + i) + 1];
+                        double interpolated = interpolated_values[i, 0, interp_i] * interpolated_values[i, 1, interp_j];
 
-                        potentialsQij[id + 0] += interpolated * tilde_values[idx + 0];
-                        potentialsQij[id + 1] += interpolated * tilde_values[idx + 1];
-                        potentialsQij[id + 2] += interpolated * tilde_values[idx + 2];
-                        potentialsQij[id + 3] += interpolated * tilde_values[idx + 3];
+                        potentialsQij[i, 0] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, 0];
+                        potentialsQij[i, 1] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, 1];
+                        potentialsQij[i, 2] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, 2];
+                        potentialsQij[i, 3] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, 3];
                     }
             });
         }
@@ -448,6 +441,7 @@ namespace Hybrid_tSNE
 
     class FFTRepulsion3D : FFTRepulsion
     {
+        internal double[,,,] tilde_values;
         internal Complex[] fft;
 
         public FFTRepulsion3D(double[] Y, double[] GradR, int N, PIConfiguration PIConfig) : base(Y, GradR, N, 3, PIConfig) { }
@@ -462,11 +456,13 @@ namespace Hybrid_tSNE
 
         internal override void Reallocate()
         {
+            tilde_values = new double[n_interpolation_points_1d, n_interpolation_points_1d, n_interpolation_points_1d, n_terms];
             fft = new Complex[(int)Math.Pow(2 * n_interpolation_points_1d, 3)];
         }
 
         internal override void Clear()
         {
+            Array.Clear(tilde_values, 0, tilde_values.Length);
             Array.Clear(fft, 0, fft.Length);
         }
 
@@ -474,9 +470,9 @@ namespace Hybrid_tSNE
         {
             Parallel.For(0, N, i =>
             {
-                int box_i = bins[i * 3] * n_interpolation_points;
-                int box_j = bins[i * 3 + 1] * n_interpolation_points;
-                int box_k = bins[i * 3 + 2] * n_interpolation_points;
+                int box_i = bins[i, 0] * n_interpolation_points;
+                int box_j = bins[i, 1] * n_interpolation_points;
+                int box_k = bins[i, 2] * n_interpolation_points;
                 double sqrsum = Y[3 * i] * Y[3 * i] + Y[3 * i + 1] * Y[3 * i + 1] + Y[3 * i + 2] * Y[3 * i + 2];
 
                 for (int interp_i = 0; interp_i < n_interpolation_points; interp_i++)
@@ -485,12 +481,12 @@ namespace Hybrid_tSNE
                         {
                             // Compute the index of the point in the interpolation grid of points
                             int id = n_terms * (((box_i + interp_i) * n_interpolation_points_1d + box_j + interp_j) * n_interpolation_points_1d + box_k + interp_k);
-                            double product = interpolated_values[3 * (interp_i * N + i)] * interpolated_values[3 * (interp_j * N + i) + 1] * interpolated_values[3 * (interp_k * N + i) + 2];
-                            tilde_values[id] += product;
-                            tilde_values[id + 1] += product * Y[3 * i];
-                            tilde_values[id + 2] += product * Y[3 * i + 1];
-                            tilde_values[id + 3] += product * Y[3 * i + 2];
-                            tilde_values[id + 4] += product * sqrsum;
+                            double product = interpolated_values[i, 0, interp_i] * interpolated_values[i, 1, interp_j] * interpolated_values[i, 2, interp_k];
+                            tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 0] += product;
+                            tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 1] += product * Y[3 * i];
+                            tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 2] += product * Y[3 * i + 1];
+                            tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 3] += product * Y[3 * i + 2];
+                            tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 4] += product * sqrsum;
                         }
             });
         }
@@ -539,8 +535,7 @@ namespace Hybrid_tSNE
                 for (int i = 0; i < n_interpolation_points_1d; i++)
                     for (int j = 0; j < n_interpolation_points_1d; j++)
                         for (int k = 0; k < n_interpolation_points_1d; k++)
-                            fft[(i * n_fft_coeffs + j) * n_fft_coeffs + k] = new Complex(tilde_values[((i * n_interpolation_points_1d + j) * n_interpolation_points_1d + k) * n_terms + d],
-                                (d == n_terms - 1) ? 0 : tilde_values[((i * n_interpolation_points_1d + j) * n_interpolation_points_1d + k) * n_terms + d + 1]);
+                            fft[(i * n_fft_coeffs + j) * n_fft_coeffs + k] = new Complex(tilde_values[i, j, k, d], (d == n_terms - 1) ? 0 : tilde_values[i, j, k, d + 1]);
 
                 Fourier.ForwardMultiDim(fft, new int[] { n_fft_coeffs, n_fft_coeffs, n_fft_coeffs });
 
@@ -555,9 +550,9 @@ namespace Hybrid_tSNE
                     for (int j = 0; j < n_interpolation_points_1d; j++)
                         for (int k = 0; k < n_interpolation_points_1d; k++)
                         {
-                            tilde_values[((i * n_interpolation_points_1d + j) * n_interpolation_points_1d + k) * n_terms + d] = fft[((n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j) * n_fft_coeffs + n_interpolation_points_1d + k].Real;
+                            tilde_values[i, j, k, d] = fft[((n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j) * n_fft_coeffs + n_interpolation_points_1d + k].Real;
                             if (d != n_terms - 1)
-                                tilde_values[((i * n_interpolation_points_1d + j) * n_interpolation_points_1d + k) * n_terms + d + 1] = fft[((n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j) * n_fft_coeffs + n_interpolation_points_1d + k].Imaginary;
+                                tilde_values[i, j, k, d + 1] = fft[((n_interpolation_points_1d + i) * n_fft_coeffs + n_interpolation_points_1d + j) * n_fft_coeffs + n_interpolation_points_1d + k].Imaginary;
                         }
             }
         }
@@ -567,24 +562,22 @@ namespace Hybrid_tSNE
             Array.Clear(potentialsQij, 0, potentialsQij.Length);
             Parallel.For(0, N, i =>
             {
-                int box_i = bins[i * 3] * n_interpolation_points;
-                int box_j = bins[i * 3 + 1] * n_interpolation_points;
-                int box_k = bins[i * 3 + 2] * n_interpolation_points;
-                int id = i * n_terms;
+                int box_i = bins[i, 0] * n_interpolation_points;
+                int box_j = bins[i, 1] * n_interpolation_points;
+                int box_k = bins[i, 2] * n_interpolation_points;
 
                 for (int interp_i = 0; interp_i < n_interpolation_points; interp_i++)
                     for (int interp_j = 0; interp_j < n_interpolation_points; interp_j++)
                         for (int interp_k = 0; interp_k < n_interpolation_points; interp_k++)
                         {
                             // Compute the index of the point in the interpolation grid of points
-                            int idx = n_terms * (((box_i + interp_i) * n_interpolation_points_1d + box_j + interp_j) * n_interpolation_points_1d + box_k + interp_k);
-                            double interpolated = interpolated_values[3 * (interp_i * N + i)] * interpolated_values[3 * (interp_j * N + i) + 1] * interpolated_values[3 * (interp_k * N + i) + 2];
+                            double interpolated = interpolated_values[i, 0, interp_i] * interpolated_values[i, 1, interp_j] * interpolated_values[i, 2, interp_k];
 
-                            potentialsQij[id] += interpolated * tilde_values[idx];
-                            potentialsQij[id + 1] += interpolated * tilde_values[idx + 1];
-                            potentialsQij[id + 2] += interpolated * tilde_values[idx + 2];
-                            potentialsQij[id + 3] += interpolated * tilde_values[idx + 3];
-                            potentialsQij[id + 4] += interpolated * tilde_values[idx + 4];
+                            potentialsQij[i, 0] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 0];
+                            potentialsQij[i, 1] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 1];
+                            potentialsQij[i, 2] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 2];
+                            potentialsQij[i, 3] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 3];
+                            potentialsQij[i, 4] += interpolated * tilde_values[box_i + interp_i, box_j + interp_j, box_k + interp_k, 4];
                         }
             });
         }

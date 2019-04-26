@@ -164,21 +164,7 @@ namespace Hybrid_tSNE
         {
             Task ATask = Task.Run(() =>
             {
-                switch (Dims)
-                {
-                    case 1:
-                        Grad = GradientAttractive1(Grad, exagg);
-                        break;
-                    case 2:
-                        Grad = GradientAttractive2(Grad, exagg);
-                        break;
-                    case 3:
-                        Grad = GradientAttractive3(Grad, exagg);
-                        break;
-                    default:
-                        Grad = GradientAttractive(Grad, exagg);
-                        break;
-                }
+                Grad = GradientAttractive(Grad, exagg);
             });
 
             double Z = 0;
@@ -237,93 +223,6 @@ namespace Hybrid_tSNE
                 }
 
                 for (int k = 0; k < Dims; k++) GradA[yi + k] = -exagg * dim[k];
-            });
-
-            return GradA;
-        }
-
-        private double[] GradientAttractive1(double[] GradA, double exagg)
-        {
-            Parallel.For(0, N, i =>
-            {
-                double weight;
-                double dim1 = 0;
-                int yi = i;
-
-                for (int j = P[i].Length - 1; j >= 0; j--)
-                {
-                    int yj = ids[i][j];
-                    weight = Y[yi] - Y[yj];
-                    weight = weight * weight;
-
-                    weight = P[i][j] / (1 + weight);
-
-                    dim1 += weight * (Y[yi] - Y[yj]);
-                }
-                GradA[yi] = -exagg * dim1;
-            });
-            return GradA;
-        }
-
-        private double[] GradientAttractive2(double[] GradA, double exagg)
-        {
-            Parallel.For(0, N, i =>
-            {
-                double diff;
-                double weight;
-                double dim1 = 0;
-                double dim2 = 0;
-                int yi = i * 2;
-
-                for (int j = P[i].Length - 1; j >= 0; j--)
-                {
-                    int yj = ids[i][j] * 2;
-                    diff = Y[yi] - Y[yj];
-                    weight = diff * diff;
-                    diff = Y[yi + 1] - Y[yj + 1];
-                    weight += diff * diff;
-
-                    weight = P[i][j] / (1 + weight);
-
-                    dim1 += weight * (Y[yi] - Y[yj]);
-                    dim2 += weight * (Y[yi + 1] - Y[yj + 1]);
-                }
-                GradA[yi] = -exagg * dim1;
-                GradA[yi + 1] = -exagg * dim2;
-            });
-            return GradA;
-        }
-
-        private double[] GradientAttractive3(double[] GradA, double exagg)
-        {
-            Parallel.For(0, N, i =>
-            {
-                double diff;
-                double weight;
-                double dim1 = 0;
-                double dim2 = 0;
-                double dim3 = 0;
-                int yi = i * 3;
-
-                for (int j = P[i].Length - 1; j >= 0; j--)
-                {
-                    int yij = ids[i][j] * 3;
-                    diff = Y[yi] - Y[yij];
-                    weight = diff * diff;
-                    diff = Y[yi + 1] - Y[yij + 1];
-                    weight += diff * diff;
-                    diff = Y[yi + 2] - Y[yij + 2];
-                    weight += diff * diff;
-
-                    weight = P[i][j] / (1 + weight);
-
-                    dim1 += weight * (Y[yi] - Y[yij]);
-                    dim2 += weight * (Y[yi + 1] - Y[yij + 1]);
-                    dim3 += weight * (Y[yi + 2] - Y[yij + 2]);
-                }
-                GradA[yi] = -exagg * dim1;
-                GradA[yi + 1] = -exagg * dim2;
-                GradA[yi + 2] = -exagg * dim3;
             });
 
             return GradA;

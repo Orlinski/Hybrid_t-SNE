@@ -105,22 +105,7 @@ namespace Hybrid_tSNE
             if (level < 3 && right - left > 2048)
                 Parallel.For(0, 1 << D, i => children[i] = BuildTreeParallel(bit - D, dids[i], dids[i + 1], level + 1));
             else
-                for (int i = (1 << D) - 1; i >= 0; i--) children[i] = BuildTreeSequential(bit - D, dids[i], dids[i + 1]);
-
-            return new HSTNode(this, dids, children);
-        }
-
-        private HSTNode BuildTreeSequential(int bit, int left, int right)
-        {
-            if (bit < 0 || right - left <= 1) return null;
-
-            int[] dids = new int[(1 << D) + 1];
-            dids[0] = left;
-            dids[1 << D] = right;
-            SortAndDivide(dids, bit, 0, 1 << D);
-
-            HSTNode[] children = new HSTNode[1 << D];
-            for (int i = (1 << D) - 1; i >= 0; i--) children[i] = BuildTreeSequential(bit - D, dids[i], dids[i + 1]);
+                for (int i = (1 << D) - 1; i >= 0; i--) children[i] = BuildTreeParallel(bit - D, dids[i], dids[i + 1], level + 1);
 
             return new HSTNode(this, dids, children);
         }
@@ -204,23 +189,6 @@ namespace Hybrid_tSNE
 
         public double EstimateRepulsion(double[] GradR, double Theta2)
         {
-            Func<int, double[], double, double> estimate;
-            switch (D)
-            {
-                case 1:
-                    estimate = root.EstimateRepulsion1;
-                    break;
-                case 2:
-                    estimate = root.EstimateRepulsion2;
-                    break;
-                case 3:
-                    estimate = root.EstimateRepulsion3;
-                    break;
-                default:
-                    estimate = root.EstimateRepulsion;
-                    break;
-            }
-
             double Z = 0;
             object Zlock = new object();
 
@@ -228,7 +196,7 @@ namespace Hybrid_tSNE
             () => 0.0d,
             (i, loopState, partialZ) =>
             {
-                return estimate(i, GradR, Theta2) + partialZ;
+                return root.EstimateRepulsion(i, GradR, Theta2) + partialZ;
             },
             (localPartialZ) =>
             {
@@ -340,146 +308,6 @@ namespace Hybrid_tSNE
                 double weight = tdist * tdist;
                 for (int k = 0; k < D; k++)
                     grad[k + pid] += weight * (tree.points[k + pid] - tree.points[k + pid2]);
-
-                return tdist;
-            }
-
-            public double EstimateRepulsion1(int pid, double[] grad, double theta2)
-            {
-                double tdist = tree.points[pid] - COM[0];
-                tdist = tdist * tdist;
-
-                if (HSize2 < theta2 * tdist)
-                {
-                    tdist = 1 / (1 + tdist);
-                    double weight = Count * tdist * tdist;
-                    grad[pid] += weight * (tree.points[pid] - COM[0]);
-                    return tdist * Count;
-                }
-
-                tdist = 0;
-                if (children[0] != null) tdist += children[0].EstimateRepulsion1(pid, grad, theta2);
-                else for (int j = DIds[0]; j < DIds[1]; j++) tdist += EstimateRepulsion1(pid, tree.ids[j], grad);
-                if (children[1] != null) tdist += children[1].EstimateRepulsion1(pid, grad, theta2);
-                else for (int j = DIds[1]; j < DIds[2]; j++) tdist += EstimateRepulsion1(pid, tree.ids[j], grad);
-
-                return tdist;
-            }
-
-            private double EstimateRepulsion1(int pid, int pid2, double[] grad)
-            {
-                if (pid2 == pid) return 0;
-                
-                double tdist = tree.points[pid] - tree.points[pid2];
-                tdist = tdist * tdist;
-
-                tdist = 1 / (1 + tdist);
-
-                double weight = tdist * tdist;
-                grad[pid] += weight * (tree.points[pid] - tree.points[pid2]);
-
-                return tdist;
-            }
-
-            public double EstimateRepulsion2(int pid, double[] grad, double theta2)
-            {
-                int id = pid * D;
-                double diff = tree.points[id] - COM[0];
-                double tdist = diff * diff;
-                diff = tree.points[id + 1] - COM[1];
-                tdist += diff * diff;
-
-                if (HSize2 < theta2 * tdist)
-                {
-                    tdist = 1 / (1 + tdist);
-                    double weight = Count * tdist * tdist;
-                    grad[id] += weight * (tree.points[id] - COM[0]);
-                    grad[id + 1] += weight * (tree.points[id + 1] - COM[1]);
-                    return tdist * Count;
-                }
-
-                tdist = 0;
-                if (children[0] != null) tdist += children[0].EstimateRepulsion2(pid, grad, theta2);
-                else for (int j = DIds[0]; j < DIds[1]; j++) tdist += EstimateRepulsion2(pid, tree.ids[j], grad);
-                if (children[1] != null) tdist += children[1].EstimateRepulsion2(pid, grad, theta2);
-                else for (int j = DIds[1]; j < DIds[2]; j++) tdist += EstimateRepulsion2(pid, tree.ids[j], grad);
-                if (children[2] != null) tdist += children[2].EstimateRepulsion2(pid, grad, theta2);
-                else for (int j = DIds[2]; j < DIds[3]; j++) tdist += EstimateRepulsion2(pid, tree.ids[j], grad);
-                if (children[3] != null) tdist += children[3].EstimateRepulsion2(pid, grad, theta2);
-                else for (int j = DIds[3]; j < DIds[4]; j++) tdist += EstimateRepulsion2(pid, tree.ids[j], grad);
-
-                return tdist;
-            }
-
-            private double EstimateRepulsion2(int pid, int pid2, double[] grad)
-            {
-                if (pid2 == pid) return 0;
-
-                pid *= D;
-                pid2 *= D;
-                double diff = tree.points[pid] - tree.points[pid2];
-                double tdist = diff * diff;
-                diff = tree.points[pid + 1] - tree.points[pid2 + 1];
-                tdist += diff * diff;
-
-                tdist = 1 / (1 + tdist);
-
-                double weight = tdist * tdist;
-                grad[pid] += weight * (tree.points[pid] - tree.points[pid2]);
-                grad[pid + 1] += weight * (tree.points[pid + 1] - tree.points[pid2 + 1]);
-
-                return tdist;
-            }
-
-
-            public double EstimateRepulsion3(int pid, double[] grad, double theta2)
-            {
-                int id = pid * D;
-                double diff = tree.points[id] - COM[0];
-                double tdist = diff * diff;
-                diff = tree.points[id + 1] - COM[1];
-                tdist += diff * diff;
-                diff = tree.points[id + 2] - COM[2];
-                tdist += diff * diff;
-
-                if (HSize2 < theta2 * tdist)
-                {
-                    tdist = 1 / (1 + tdist);
-                    double weight = Count * tdist * tdist;
-                    grad[id] += weight * (tree.points[id] - COM[0]);
-                    grad[id + 1] += weight * (tree.points[id + 1] - COM[1]);
-                    grad[id + 2] += weight * (tree.points[id + 2] - COM[2]);
-                    return tdist * Count;
-                }
-
-                tdist = 0;
-                for (int i = (1 << D) - 1; i >= 0; i--)
-                    if (children[i] != null) tdist += children[i].EstimateRepulsion3(pid, grad, theta2);
-                    else
-                        for (int j = DIds[i]; j < DIds[i + 1]; j++) tdist += EstimateRepulsion3(pid, tree.ids[j], grad);
-
-                return tdist;
-            }
-
-            private double EstimateRepulsion3(int pid, int pid2, double[] grad)
-            {
-                if (pid2 == pid) return 0;
-
-                pid *= D;
-                pid2 *= D;
-                double diff = tree.points[pid] - tree.points[pid2];
-                double tdist = diff * diff;
-                diff = tree.points[pid + 1] - tree.points[pid2 + 1];
-                tdist += diff * diff;
-                diff = tree.points[pid + 2] - tree.points[pid2 + 2];
-                tdist += diff * diff;
-
-                tdist = 1 / (1 + tdist);
-
-                double weight = tdist * tdist;
-                grad[pid] += weight * (tree.points[pid] - tree.points[pid2]);
-                grad[pid + 1] += weight * (tree.points[pid + 1] - tree.points[pid2 + 1]);
-                grad[pid + 2] += weight * (tree.points[pid + 2] - tree.points[pid2 + 2]);
 
                 return tdist;
             }
