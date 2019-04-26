@@ -1,0 +1,34 @@
+{
+	"Initialization": {
+		"SmartInit": true,
+		"InitialSolutionSeed": -1
+	},
+	"Affinities": {
+		"Perplexity": 30,
+		"EntropyTol": 1e-5,
+		"EntropyIter": 50
+	},
+	"LSHF": {
+		"LSHForestTrees": 64,
+		"LSHTreeC": 4,
+		"LSHHashDims": 10,
+		"LSHSeed": -1
+	},
+  "Gradient": {
+    "Iterations": 1000,
+    "Exaggeration": "if(Iteration < 250, 12 - 11 / (1 + Exp(-0.05 * (Iteration - 200))), 1)",
+    "Momentum": "if(Iteration < 250, 0.5, 0.8)",
+    "LearningRate": "200",
+    "RepulsionMethod": "auto",
+    "GradMinGain": 0.01
+  },
+	"BarnesHut": {
+    "BarnesHutCondition": 0.5,
+    "Presort": false
+	},
+	"PI": {
+		"min_num_intervals": 50,
+		"intervals_per_integer": 1,
+		"n_interpolation_points": 3
+	}
+}
