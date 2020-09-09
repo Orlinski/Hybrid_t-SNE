@@ -6,11 +6,6 @@ We provide three versions of Hybrid t-SNE:
 * .NET Core 2.2 version - Made for multiplatform compatibility. Ported from .NET Framework version without changes.
 * "Readable" version (unmaintained) - Code easier to understand, with some optimalizations removed, like dimensionality dedicated methods and flattening of multidimensional arrays. More comprehensible, but slower - not recommended for use.
 
-## Available binaries
-Binaries comming soon!
-
-## Available wrappers
-Python, Java, R, C++, Ruby, Perl and more (?) wrappers comming soon!
 
 ## Dependencies:
 .NET Framework 4.5 or .NET Core 2.2
@@ -80,3 +75,22 @@ See Runner for example use, in short:
 
 ## Authors
 Marek Orliński and Norbert Jankowski, [Department of Informatics](https://www.fizyka.umk.pl/en/doi/), [Nicolaus Copernicus University in Toruń](https://www.umk.pl/en/)
+
+## Citation
+Please cite our work when using our algorithm:
+
+```
+Marek Orliński and Norbert Jankowski. “Fast t-SNE algorithm with forest of balanced LSH trees and hybrid computation of repulsive forces”. In: Knowledge-Based Systems 208 (2020), pp. 1–16
+```
+
+```
+@ARTICLE{OrlinskiJankowskiFastTSNE2020,
+  author =       {M. Orli\'nski and N. Jankowski},
+  title =        {Fast t-SNE algorithm with forest of balanced LSH trees and hybrid computation of repulsive forces},
+  journal =      KBS,
+  year =         {2020},
+  volume =       {208},
+  pages =        {1--16},
+  doi =          {https://doi.org/10.1016/j.knosys.2020.106318},
+}
+```
